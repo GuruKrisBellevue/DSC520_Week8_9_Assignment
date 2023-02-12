@@ -1,0 +1,375 @@
+---
+title: "DSC520_Week8_9_AssignmentPart3_Guruprasad_VelikaduKrishnamoorthy"
+author: "Guruprasad Velikadu Krishnamoorthy"
+date: "2023-02-12"
+output: 
+  pdf_document: 
+    highlight: espresso
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_knit$set(root.dir = "C:/Users/Gurup/GURU/Learning/Masters/Term_2/DSC520_T302_Statistics_for_Data_Science/Week_8/")
+knitr::opts_chunk$set(tidy.opts = list(width.cutoff = 90), tidy = TRUE)
+```
+
+```{r}
+# Calling the Libraries used
+library(readxl, quietly=TRUE)
+library(dplyr, quietly=TRUE)
+library(lubridate, quietly=TRUE)
+library(magrittr, quietly=TRUE)
+library(olsrr, quietly=TRUE)
+library(QuantPsyc, quietly=TRUE)
+library(relaimpo, quietly=TRUE)
+library(car, quietly=TRUE)
+```
+
+# Assignment Part-3 (Housing Dataset)
+***i. Explain any transformations or modifications you made to the dataset***
+
+```{r}
+# loading the housing dataset
+excel_path <-  "data/week-6-housing.xlsx"
+housing_data_df_all <- read_excel(excel_path)
+# Examining the structure and summary
+str(housing_data_df_all)
+summary(housing_data_df_all)
+nrow(housing_data_df_all)
+```
+
+```{r}
+# As some of the columns can be factors, converting the columns as factors
+
+housing_data_df_all$sitetype <- as.factor(housing_data_df_all$sitetype)
+housing_data_df_all$zip5 <- as.factor(housing_data_df_all$zip5)
+housing_data_df_all$postalctyn <- as.factor(housing_data_df_all$postalctyn)
+housing_data_df_all$current_zoning <- as.factor(housing_data_df_all$current_zoning)
+housing_data_df_all$prop_type <- as.factor(housing_data_df_all$prop_type)
+# Renaming columns for easy usage
+housing_data_df_all <- housing_data_df_all %>% rename(Sale_Date = "Sale Date")
+housing_data_df_all <- housing_data_df_all %>% rename(Sale_Price = "Sale Price")
+# Transforming and creating new_columns. 2 new columns for Price per square foot are calculated
+housing_data_df_all$Price_per_square_ft_living <- with(housing_data_df_all,Sale_Price/square_feet_total_living)
+housing_data_df_all$Price_per_square_ft_lot <- with(housing_data_df_all,Sale_Price/sq_ft_lot)
+nrow(housing_data_df_all)
+
+# Identifying the outliers and cleaning the dataset.
+hist(housing_data_df_all$Price_per_square_ft_living)
+# Box plot is used to identify the outliers in the dataset. They were used on the newly created PricePerSqFt fields
+boxplot(housing_data_df_all$Price_per_square_ft_living)
+boxplot(housing_data_df_all$Price_per_square_ft_lot)
+# Box plot is also used on the columns that can be used as predictors
+boxplot(housing_data_df_all$square_feet_total_living)
+boxplot(housing_data_df_all$sq_ft_lot)
+
+
+```
+
+```{r}
+# Identifying the Outliers using boxplot.stats function
+
+housing_data_df_all <- housing_data_df_all[! housing_data_df_all$Price_per_square_ft_living %in% boxplot.stats(housing_data_df_all$Price_per_square_ft_living)$out, ] 
+
+housing_data_df_all <- housing_data_df_all[! housing_data_df_all$Price_per_square_ft_lot %in% boxplot.stats(housing_data_df_all$Price_per_square_ft_lot)$out, ] 
+
+
+housing_data_df_all <- housing_data_df_all[! housing_data_df_all$square_feet_total_living %in% boxplot.stats(housing_data_df_all$square_feet_total_living)$out, ] 
+
+housing_data_df_all <- housing_data_df_all[! housing_data_df_all$sq_ft_lot %in% boxplot.stats(housing_data_df_all$sq_ft_lot)$out, ] 
+
+# Filtering and cleansing the data based on the results from box plot to have a reasonable range of data from the dataset
+
+
+housing_data_df_all <- housing_data_df_all %>% filter(zip5 %in% c("98052","98053"))
+housing_data_df_all <- housing_data_df_all[housing_data_df_all$Price_per_square_ft_living >=150 & housing_data_df_all$Price_per_square_ft_living <=300,]
+housing_data_df_all <- housing_data_df_all[housing_data_df_all$Sale_Price<=1000000 & housing_data_df_all$Sale_Price>=50000,]
+housing_data_df_all <- housing_data_df_all[housing_data_df_all$square_feet_total_living >=0 & housing_data_df_all$square_feet_total_living <=4400,]
+housing_data_df_all <- housing_data_df_all[housing_data_df_all$Price_per_square_ft_lot >=30 & housing_data_df_all$Price_per_square_ft_lot <=210,]
+housing_data_df_all <- housing_data_df_all[housing_data_df_all$sq_ft_lot >=0 & housing_data_df_all$sq_ft_lot <=14500,]
+housing_data_df_all <- housing_data_df_all[housing_data_df_all$bath_full_count <=10,] 
+nrow(housing_data_df_all)
+```
+
+```{r}
+# creating a sample dataset from the dataset that was cleansed.
+set.seed(40) # Use seed 40
+# created new Dataframe of sample size 3000 for further use
+housing_data_df <- housing_data_df_all[sample(nrow(housing_data_df_all), size=3000), ]
+nrow(housing_data_df)
+```
+
+```{r}
+# Examine the results after cleansing the data and sampleing the data.
+# Box plot is used to identify the outliers in the dataset. They were used on the newly created PricePerSqFt fields
+boxplot(housing_data_df$Price_per_square_ft_living)
+boxplot(housing_data_df$Price_per_square_ft_lot)
+# Box plot is also used on the columns that can be used as predictors
+boxplot(housing_data_df$square_feet_total_living)
+boxplot(housing_data_df$sq_ft_lot)
+```
+
+***ii. Create two variables; one that will contain the variables Sale Price and Square Foot of Lot (same variables used from previous assignment on simple regression) and one that will contain Sale Price and several additional predictors of your choice. Explain the basis for your additional predictor selections***
+
+```{r}
+# creating the first model with only sq_ft_lot as Predictor
+housing_lm1 <- lm(Sale_Price~sq_ft_lot,data=housing_data_df,na.action = na.omit)
+summary(housing_lm1)
+```
+
+```{r}
+# Creating a Regression model with possible 7 fields that can be a good predictor and testing the results using olsrr package 
+# Assumption: The assumption with building grade is, the higher the number better the grade
+housing_lm3 <- lm(Sale_Price ~ sq_ft_lot+square_feet_total_living+building_grade+bedrooms+bath_full_count+bath_half_count+year_built,data=housing_data_df,na.action = na.omit)
+# creating all models using ols_step_all_possible function and plotting the results
+all.mod <- ols_step_all_possible(model=housing_lm3)
+head(all.mod,n=5)
+#plot(all.mod) 
+# Finding the best set of predictors and plotting the results
+best.mod <- ols_step_best_subset(model=housing_lm3)
+best.mod
+#plot(best.mod)
+# Confirming the results by executing forward, backward & stepwise methods
+ols_step_forward_p(model=housing_lm3,details=FALSE)
+ols_step_backward_p(model=housing_lm3,details=FALSE)
+ols_step_both_p(model=housing_lm3,details=FALSE)
+```
+
+```{r}
+# Solution: The results of the best.mod indicates that the values of R2 changes very little after adding 5 Predictors. Also results of Stepwise selection indicates using 4 predictors: sq_ft_lot square_feet_total_living building_grade  year_built.
+# creating final model based on the above results
+housing_lm5 <- lm(Sale_Price ~ sq_ft_lot+square_feet_total_living+building_grade+year_built,data=housing_data_df,na.action = na.omit)
+```
+
+
+
+***iii. Execute a summary() function on two variables defined in the previous step to compare the model results. What are the R2 and Adjusted R2 statistics? Explain what these results tell you about the overall model. Did the inclusion of the additional predictors help explain any large variations found in Sale Price?***
+
+```{r}
+# Comparing the results between first and final model created
+summary(housing_lm1)
+summary(housing_lm5)
+impacts=calc.relimp(housing_lm5,type="lmg")
+impacts
+
+# The above relimp command explains the impact of each predictor in the final R2 metric. The results indicate, sq_dt_lot contributes 2.75% and square_feet_total_living contributes 46.34%, building_grade contributes 20.3% and year_built contributes 8.63% of the variance in the Sales price. It all sums up to the total R2 contribution of 78.06%
+```
+```{r}
+# Solution: The multiple R2 metrics has improved from 0.01889 for 1 predictor to 0.7806 with 4 predictors used in the final mode. This tells us the variable sq_ft_lot accounts for 1.89% variation in the Home sale price. Whereas the 4 new predictors in the final model can account for 78.06% of variation in the Home sale price which is a significant Improvement in the results. 
+
+# The Adjusted R2 indicates the shrinkage also known as the loss of predictive power of the model. The Adjusted R2 tells us how much variance in the Sales Price can be accounted for if the model was derived from the original dataset from which the data was sampled. The adjusted R2 for the final model (0.7806) is pretty close to the Multiple R2(0.7803) which indicates the model can be a good predictor for any other samples derived from the Housing dataset. 
+
+# The p-value in the summary of final model is significantly less than zero. So it indicates that the Null hypotheses of no model exists can be rejected and the Regression model housing_lm5 can be accepted as a good predictor for Sale Price. The inclusion of additional predictors explain large variation in the sales price. The Final Equation look like below :
+
+# Sale_Price$ = $(-2.620e+06) + (4.950e+00 * sq_ft_lot) + (1.583e+02 * square_feet_total_living) + (3.684e+04 * building_grade) + (1.239e+03 * year_built) 
+```
+
+
+
+***iv. Considering the parameters of the multiple regression model you have created. What are the standardized betas for each parameter and what do the values indicate?***
+
+```{r}
+lm.beta(housing_lm5)
+
+# Calculating the Standard deviation for each predictor and the impact it has on the Sales Price
+sd(housing_data_df$sq_ft_lot)
+sd(housing_data_df$Sale_Price) *  0.0806898
+
+sd(housing_data_df$square_feet_total_living)
+sd(housing_data_df$Sale_Price) *  0.6844700
+
+sd(housing_data_df$building_grade)
+sd(housing_data_df$Sale_Price) *  0.1871231
+
+sd(housing_data_df$year_built)
+sd(housing_data_df$Sale_Price) *  0.1226844
+
+```
+
+```{r}
+# Solution:  The standardized beta indicates the measure if the standard deviation of the Predictor changes by one standard Deviation, how many standard deviations it will change in the Outcome variable. 
+
+# sq_ft_lot: If the sq_ft_lot changes by 1 std deviation , the Sales price will crease by 0.0806898 std deviation. To put it in numbers, if the sq_ft_lot increases by 2647.703 sq.ft, the Sales price increases by (162437.2 * 0.0806898) $13,107.02
+
+# square_feet_total_living : If the square_feet_total_living changes by 1 std deviation, the Sales price will increase by  0.6844700 std deviation. To put it in numbers, if the square_feet_total_living increases by 702.1958 sq.ft, the Sales price increases by (162437.2 *  0.6844700) $111,183.4
+
+# building_grade : If the building_grade changes by 1 std deviation, the Sales price will increase by  0.18745339 std deviation. To put it in numbers, if the building_grade increases by 0.1871231, the Sales price increases by (162437.2 *  0.18745339) $30,395.75
+
+# year_built: If the year_built changes by 1 std deviation, the Sales price will increase by  0.1226844 std deviation. To put it in numbers, if the year_built increases by 16.08213 years, the Sales price increases by (162437.2 *  0.1226844) $19,928.51
+```
+
+***v. Calculate the confidence intervals for the parameters in your model and explain what the results indicate.***
+```{r}
+confint(housing_lm5)
+# Explanation: The results indicates that if we were to take 100 samples from the housing dataset and calculated the confidence intervals, 95% of the confidence intervals would contain the true value of the regression coefficients. All the Predictors have positive value which indicates the direction of relationship which is positive .Also none of the predictors have coefficients crossing zero. 
+# The 2 predictors square_feet_total_living and building grade have tight confidence interval which indicates their estimates are likely to be truly representative of the final model. The other predictors sq_ft_lot and year_built have fairly larger CI that indicates they are of lesser impact and lesser representative of the final model. 
+```
+
+***vi. Assess the improvement of the new model compared to your original model (simple regression model) by testing whether this change is significant by performing an analysis of variance***
+```{r}
+anova(housing_lm1,housing_lm5)
+
+# The results of anova which compares hierarchical models and the results have a F value of 3465.5 with a p value significantly smaller than 0. These results indicate the Model with 4 predictors(housing_lm5) have significant improvement compared to the simple regression model housing_lm1. 
+```
+
+***vii. Perform casewise diagnostics to identify outliers and/or influential cases, storing each function's output in a dataframe assigned to a unique variable name.***
+
+```{r}
+outliers_inflCases_df <- housing_data_df[,c("Sale_Price","sq_ft_lot","square_feet_total_living","building_grade","year_built")]
+# Outliers
+outliers_inflCases_df$residuals <- resid(housing_lm5)
+outliers_inflCases_df$standardized.residuals <- rstandard(housing_lm5)
+outliers_inflCases_df$studentized.residuals <- rstudent(housing_lm5)
+# Influential Cases
+outliers_inflCases_df$cooks.distance <- cooks.distance(housing_lm5)
+outliers_inflCases_df$leverage <- hatvalues(housing_lm5)
+outliers_inflCases_df$covariance.ratios <- covratio(housing_lm5)
+outliers_inflCases_df$dfbeta <- dfbeta(housing_lm5)
+outliers_inflCases_df$dffits <- dffits(housing_lm5)
+str(outliers_inflCases_df)
+
+# other way of identifying the outliers and/or influential cases is by using influence.measures function:
+infl_measures <- influence.measures(housing_lm5)
+cook.d <- (influence.measures(housing_lm5)$infmat[,"cook.d"])
+```
+
+***viii. Calculate the standardized residuals using the appropriate command, specifying those that are +-2, storing the results of large residuals in a variable you create.***
+
+```{r}
+# For any normally distributes sample we expect 95% of z-scores to lie between -1.96 and +1.96. These have been rounded off to 2. So we expect 95% of the Standardized residuals to lie with in the range of +/-2. The standardized residuals are calculated as a measure of residuals divided by the std.deviation.
+outliers_inflCases_df$large.residual <- outliers_inflCases_df$standardized.residuals >2 | outliers_inflCases_df$standardized.residuals < -2
+```
+
+***ix. Use the appropriate function to show the sum of large residuals.***
+```{r}
+# creating variables to validate if 95% of the cases lie within the standardized.residuals interval of -2 and 2
+sum_outliers_95 <- sum(outliers_inflCases_df$large.residual)
+sum_outliers_95
+sum_outliers_95_percent <- (sum_outliers_95/nrow(housing_data_df)*100)
+# The results indicates only 3.83 % of cases are outside the range of -2 and 2 standardized.residuals and is within acceptable range of 5%. SO the model is a good representation of the data. 
+sum_outliers_95_percent
+
+# creating variables to validate if 99% of the cases lie within the standardized.residuals interval of -2.58 and 2.58
+sum_outliers_99 <- sum(outliers_inflCases_df$standardized.residuals >2.58 | outliers_inflCases_df$standardized.residuals < -2.58)
+sum_outliers_99
+sum_outliers_99_percent <- (sum_outliers_99/nrow(housing_data_df)*100)
+# The results indicates only 0.667 % of cases are outside the range of -2.58 and 2.58 standardized.residuals and is within acceptable range of 1%. So the model is a good representation of the data.
+sum_outliers_99_percent
+
+# creating variables to validate if 99.9% of the cases lie within the standardized.residuals interval of -3.29 and 3.29
+sum_outliers_99.9 <- sum(outliers_inflCases_df$standardized.residuals >3.29 | outliers_inflCases_df$standardized.residuals < -3.29)
+sum_outliers_99.9
+sum_outliers_99.9_percent <- (sum_outliers_99.9/nrow(housing_data_df)*100)
+# The results indicates only 0.033 % of cases are outside the range of -3.29 and 3.29 standardized.residuals and is within acceptable range of 0.1%. So the model is a good representation of the data.
+sum_outliers_99.9_percent
+```
+
+***x. Which specific variables have large residuals (only cases that evaluate as TRUE)?***
+
+```{r}
+# Restricting the rows that has outliers_inflCases_df$large.residual =TRUE and creating a new tibble. 
+large_residuals_df <- outliers_inflCases_df[outliers_inflCases_df$large.residual,c("Sale_Price","sq_ft_lot","square_feet_total_living","building_grade","year_built","standardized.residuals","cooks.distance","leverage","covariance.ratios")]
+nrow(large_residuals_df)
+large_residuals_df
+```
+
+***xi. Investigate further by calculating the leverage, cooks distance, and covariance rations. Comment on all cases that are problematics.***
+```{r}
+# The cook distance, leverage and covariance ratios were calculated in the previous questions.
+large_residuals_df[,c("cooks.distance","leverage","covariance.ratios")]
+# The below command checks how many rows have cooks distance greater than 1 and selects the required columns.
+large_residuals_df[large_residuals_df$cooks.distance >=1,c("cooks.distance","leverage","covariance.ratios")]
+# Results of cooks distance shows none of them have cook's distance greater than 1 and hence none of the cases is having an undue influence on the model.
+```
+
+```{r}
+# Average Leverage can be calculated by (k+1/n), where k is the number of predictors and n is the total number of cases.
+avg_leverage <- (4+1)/nrow(housing_data_df)
+avg_leverage
+times3_avg_leverage <- 3*avg_leverage
+times3_avg_leverage
+# Validating the number of cases with leverage greater than 3 times the avg.leverage
+large_residuals_df[large_residuals_df$leverage > times3_avg_leverage,c("Sale_Price","sq_ft_lot","square_feet_total_living","building_grade","year_built","cooks.distance","leverage","covariance.ratios")]
+```
+```{r}
+# The Upper limit of covariance ratios can be calculated as 1+ 3 times the average leverage and lower limit is 1- 3 times the average leverage. 
+cvr_lower <-  1- times3_avg_leverage
+cvr_lower
+cvr_upper <-  1+ times3_avg_leverage
+cvr_upper
+
+# Validating the number of cases with covariance ratios above the upper range and below the lower range. Results indicate all impacted cases(62 cases) have cov.ratio below the lower range.
+large_residuals_df[large_residuals_df$covariance.ratios > cvr_upper ,c("Sale_Price","sq_ft_lot","square_feet_total_living","building_grade","year_built","cooks.distance","leverage","covariance.ratios")]
+large_residuals_df[large_residuals_df$covariance.ratios < cvr_lower ,c("Sale_Price","sq_ft_lot","square_feet_total_living","building_grade","year_built","cooks.distance","leverage","covariance.ratios")]
+# Examining the summary of the cov.ratios for those impacted cases indicate that the minimum is 0.9804 which is 0.01 less than the acceptable value of 0.995. The mean is 0.9928 which is pretty close to the acceptable lower range. Also all the impacted cases have cook's distance lesser than 1, so there is probably little cause for alarm.
+summary(large_residuals_df[large_residuals_df$covariance.ratios < cvr_lower ,c("covariance.ratios")])
+```
+
+***xii. Perform the necessary calculations to assess the assumption of independence and state if the condition is met or not.***
+
+```{r}
+
+durbinWatsonTest(housing_lm5)
+
+# The results of durbinWatsonTest for model housing_lm5 shows that the Statistic is close to 2 which indicates better values and also the value of p is 0.61 which means not remotely significant.
+
+```
+
+***xiii. Perform the necessary calculations to assess the assumption of no multicollinearity and state if the condition is met or not.***
+
+```{r}
+# multicollinearity exists if two or more predictors in a regression model have a correlation between them. The results of vif are all well below 10 and there is no reason for concern and it suggests the multicollinearity does not exiist in the model.
+vif(housing_lm5)
+# 1/ vif(housing_lm5) indicates the tolerance and as all tolerance is more than 0.1, the values are satisfactory.
+1/vif(housing_lm5)
+# The Average of vif is higher than 1 but not significantly higher, so the model is not too biased.
+mean(vif(housing_lm5))
+```
+
+***xiv. Visually check the assumptions related to the residuals using the plot() and hist() functions. Summarize what each graph is informing you of and if any anomalies are present.***
+
+```{r}
+
+plot(housing_lm5)
+hist(outliers_inflCases_df$studentized.residuals)
+
+# Explanation: The first graph of fitted values vs residuals shows a random array of dots dispersed around zero and does not funnel out. So this shows that the assumptions for linearity and homoscedasicity have been met. There are no curve patterns in this graph either. Also we see similar chunk of residuals above and below zero which indicates the relationship is linear. 
+
+# The second Q-Q plot shows most of the values are between -2 and +2 Standard deviation and there are a few outliers and the numbering is shown as case number 2515, etc.
+
+# The third plot SCale-location plot explains the extent of homoscedasicity in the model. Though the redline is not relatively horizontal, there is not cluster or pattern in the data points and looks like a cloud which indicates homoscedasicity.
+
+# The fourth plot Residuals vs Leverage helps us find Influential data points that can have a bigger effect on the linear model. As shown in the plot there are no data points that lies outside the cook's distance. SO it indicates there are no influential outlier in the model
+
+# The histogram on the studentized residuals shows that the model is almost normally distributed with some left skew.  
+```
+
+***xv. Overall, is this regression model unbiased? If an unbiased regression model, what does this tell us about the sample vs. the entire population model?***
+```{r}
+# Solution: The average Value of VIF indicates how much the model is biased. the average for our model comes about `mean(vif(housing_lm5))` which is not significantly greater than 1, so our model is not too biased.
+
+# Other ways of finding the effectiveness of our model to other samples from dataset is by validating the adjusted R2. If the Adjusted R2 is close to the Multiple R2, it indicates there is not much bias, which is true for the model housing_lm5.
+summary(housing_lm5)
+# The Model can be used to predict values and the results can be compared to see the effectiveness. 
+outliers_inflCases_df$predict_saleprice <- predict(housing_lm5, predict_saleprice = outliers_inflCases_df)
+
+# Another way of testing the effectiveness/presence of bias in the model is by taking different samples from original dataset and testing the results and comparing the results. 
+
+set.seed(42) 
+housing_data_df_2 <- housing_data_df_all[sample(nrow(housing_data_df_all), size=2000), ]
+nrow(housing_data_df_2)
+# create a new model from same set of predictors taking different sample set to compare the results
+housing_lm6 <- lm(Sale_Price ~ sq_ft_lot+square_feet_total_living+building_grade+year_built,data=housing_data_df_2,na.action = na.omit)
+
+summary(housing_lm6)
+plot(housing_lm6)
+# The results  of summary of the new model created for different sample size indicates there is not much difference between R2 and adjusted R2 and is very close to the values of original model housing_lm5. Also the plots of housing_lm6 are very similar to the plot of housing_lm5. All these results prove that our model is almost unbiased and can be effective with any samples and beyond. 
+
+```
+        
+***Session Info***
+```{r}
+sessionInfo()
+```
+
+
